@@ -78,9 +78,25 @@ def main():
             seen.add(key); unique.append(x)
     all_examples=unique
     # Split by conversation ID to prevent near-duplicate context leakage.
-    rng=random.Random(args.seed); ids=sorted(set(x["conversation_id"] for x in all_examples)); rng.shuffle(ids)
-    n=max(1,round(len(ids)*args.validation_fraction)) if len(ids)>=10 else 0
-    val_ids=set(ids[:n]); train=[x for x in all_examples if x["conversation_id"] not in val_ids]; val=[x for x in all_examples if x["conversation_id"] in val_ids]
+    rng=random.Random(args.seed)
+    ids=sorted(set(x["conversation_id"] for x in all_examples))
+    rng.shuffle(ids)
+    if len(ids) > 1:
+        n=max(1, round(len(ids)*args.validation_fraction))
+        n=min(n, len(ids)-1)
+        val_ids=set(ids[:n])
+        train=[x for x in all_examples if x["conversation_id"] not in val_ids]
+        val=[x for x in all_examples if x["conversation_id"] in val_ids]
+    elif len(all_examples) > 1:
+        # Fallback for a single conversation: avoid an empty validation file.
+        rng.shuffle(all_examples)
+        n=max(1, round(len(all_examples)*args.validation_fraction))
+        n=min(n, len(all_examples)-1)
+        val=all_examples[:n]
+        train=all_examples[n:]
+    else:
+        train=[]
+        val=[]
     out=Path(args.output); out.mkdir(parents=True,exist_ok=True)
     for name,rows in (("train.jsonl",train),("validation.jsonl",val)):
         with (out/name).open("w",encoding="utf-8") as f:
