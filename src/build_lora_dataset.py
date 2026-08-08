@@ -77,32 +77,37 @@ def main():
         if key not in seen:
             seen.add(key); unique.append(x)
     all_examples=unique
-    # Split by conversation ID to prevent near-duplicate context leakage.
+    # A conversation-level holdout is correct only when there are enough independent
+    # conversations. The current cleaned export has one record per archive (five total),
+    # and archive sizes are extremely uneven; holding out one archive can be ~50% of rows.
+    # Fall back to a seeded example-level split for fewer than 10 conversations.
     rng=random.Random(args.seed)
     ids=sorted(set(x["conversation_id"] for x in all_examples))
     rng.shuffle(ids)
-    if len(ids) > 1:
+    if len(ids) >= 10:
         n=max(1, round(len(ids)*args.validation_fraction))
         n=min(n, len(ids)-1)
         val_ids=set(ids[:n])
         train=[x for x in all_examples if x["conversation_id"] not in val_ids]
         val=[x for x in all_examples if x["conversation_id"] in val_ids]
+        split_strategy="conversation-level"
     elif len(all_examples) > 1:
-        # Fallback for a single conversation: avoid an empty validation file.
         rng.shuffle(all_examples)
         n=max(1, round(len(all_examples)*args.validation_fraction))
         n=min(n, len(all_examples)-1)
         val=all_examples[:n]
         train=all_examples[n:]
+        split_strategy="example-level fallback (only %d archive-level conversations)" % len(ids)
     else:
         train=[]
         val=[]
+        split_strategy="empty"
     out=Path(args.output); out.mkdir(parents=True,exist_ok=True)
     for name,rows in (("train.jsonl",train),("validation.jsonl",val)):
         with (out/name).open("w",encoding="utf-8") as f:
             for x in rows:
                 f.write(json.dumps({"prompt":x["prompt"],"completion":x["completion"]},ensure_ascii=False)+"\n")
-    info={"base_model":MODEL,"format":"conversational prompt-completion","train_examples":len(train),"validation_examples":len(val),"mapped_conversations":len(ids),"preserves_edgy_content":True,"note":"Only direct identifiers/secrets removed by the earlier cleaner are absent; no additional sensitivity filtering is done here."}
+    info={"base_model":MODEL,"format":"conversational prompt-completion","train_examples":len(train),"validation_examples":len(val),"mapped_conversations":len(ids),"split_strategy":split_strategy,"preserves_edgy_content":True,"note":"Only direct identifiers/secrets removed by the earlier cleaner are absent; no additional sensitivity filtering is done here."}
     (out/"dataset_info.json").write_text(json.dumps(info,indent=2),encoding="utf-8")
     print(json.dumps(info,indent=2))
 if __name__=="__main__": main()
