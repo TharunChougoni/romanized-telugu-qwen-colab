@@ -1,0 +1,26 @@
+# Private/raw data
+*.zip
+*.txt
+*.vcf
+!requirements-colab.txt
+!README.md
+!src/**/*.py
+!notebooks/**/*.ipynb
+
+# Generated/private datasets
+cleaned_turns.jsonl
+cleaned_conversations.jsonl
+sft_candidates.jsonl
+speaker_mapping.json
+qwen_sft/
+qwen3-romanized-telugu-lora/
+processing_report.json
+
+# Secrets and runtime files
+.env
+*.key
+*.pem
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+content/
