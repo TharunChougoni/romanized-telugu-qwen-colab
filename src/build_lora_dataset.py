@@ -1,7 +1,8 @@
 """Build LoRA-ready Qwen conversational SFT data.
 
 Input: cleaned_conversations.jsonl with anonymous speaker roles.
-Output: prompt-completion JSONL, where completion is one assistant turn.
+Output: prompt-completion JSONL, where completion is one target speaker turn.
+Use --all-speakers when consent permits learning from every participant.
 
 This preserves offensive, profane, sexual, sarcastic, and otherwise edgy style
 content. It still relies on the earlier cleaner for direct identifiers/secrets;
@@ -50,7 +51,8 @@ def make_examples(rec, assistant_speaker, max_context_turns, min_chars):
 def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--input",required=True); ap.add_argument("--output",required=True)
-    ap.add_argument("--mapping-json",required=True)
+    ap.add_argument("--mapping-json")
+    ap.add_argument("--all-speakers",action="store_true",help="Use every participant as an assistant target in separate examples")
     ap.add_argument("--max-context-turns",type=int,default=8)
     ap.add_argument("--min-assistant-chars",type=int,default=2)
     ap.add_argument("--validation-fraction",type=float,default=.1)
@@ -61,10 +63,20 @@ def main():
         for line in f:
             if not line.strip(): continue
             rec=json.loads(line); cid=str(rec.get("conversation_id",""))
-            speaker=mapping.get(cid)
-            if not speaker: continue
-            conversations.append(cid)
-            all_examples.extend(make_examples(rec,speaker,args.max_context_turns,args.min_assistant_chars))
+            turns=clean_turns(rec.get("messages", []))
+            speakers=sorted({x["speaker"] for x in turns})
+            targets=speakers if args.all_speakers else ([mapping[cid]] if cid in mapping else [])
+            for speaker in targets:
+                conversations.append(cid)
+                all_examples.extend(make_examples(rec,speaker,args.max_context_turns,args.min_assistant_chars))
+
+    # Deduplicate exact prompt/completion pairs while preserving the first copy.
+    unique=[]; seen=set()
+    for x in all_examples:
+        key=json.dumps(x,ensure_ascii=False,sort_keys=True)
+        if key not in seen:
+            seen.add(key); unique.append(x)
+    all_examples=unique
     # Split by conversation ID to prevent near-duplicate context leakage.
     rng=random.Random(args.seed); ids=sorted(set(x["conversation_id"] for x in all_examples)); rng.shuffle(ids)
     n=max(1,round(len(ids)*args.validation_fraction)) if len(ids)>=10 else 0

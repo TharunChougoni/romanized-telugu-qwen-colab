@@ -13,7 +13,7 @@ cleaned anonymous conversations
 → evaluate against the base model
 ```
 
-The builder intentionally preserves edgy style: profanity, insults, sarcasm, sexual language, taboo wording, and other “unhinged” tone are not filtered at the SFT-builder stage. The earlier cleaner may already have removed direct identifiers, secrets, media placeholders, and messages matching high-risk financial/medical keywords; those cannot be restored from the cleaned file.
+The builder intentionally preserves edgy style: profanity, insults, sarcasm, sexual language, taboo wording, and other “unhinged” tone are not filtered at the SFT-builder stage. Use `--all-speakers` when you have consent from all participants; this creates a target example for every participant turn instead of discarding friends’ responses. The earlier cleaner may already have removed direct identifiers, secrets, media placeholders, and messages matching high-risk financial/medical keywords; those cannot be restored from the cleaned file.
 
 ## Colab
 
