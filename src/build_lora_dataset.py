@@ -56,6 +56,8 @@ def main():
     ap.add_argument("--max-context-turns",type=int,default=8)
     ap.add_argument("--min-assistant-chars",type=int,default=2)
     ap.add_argument("--validation-fraction",type=float,default=.1)
+    ap.add_argument("--max-train-examples",type=int,default=0,help="Write at most this many randomized training examples (0 = all)")
+    ap.add_argument("--max-validation-examples",type=int,default=0,help="Write at most this many randomized validation examples (0 = all)")
     ap.add_argument("--seed",type=int,default=42)
     args=ap.parse_args()
     mapping=read_mapping(args.mapping_json); all_examples=[]; conversations=[]
@@ -102,6 +104,14 @@ def main():
         train=[]
         val=[]
         split_strategy="empty"
+    # The split lists are already seeded/shuffled in the example-level fallback.
+    # Shuffle once more for a deterministic representative cap in either split mode.
+    rng.shuffle(train)
+    rng.shuffle(val)
+    if args.max_train_examples:
+        train=train[:args.max_train_examples]
+    if args.max_validation_examples:
+        val=val[:args.max_validation_examples]
     out=Path(args.output); out.mkdir(parents=True,exist_ok=True)
     for name,rows in (("train.jsonl",train),("validation.jsonl",val)):
         with (out/name).open("w",encoding="utf-8") as f:
