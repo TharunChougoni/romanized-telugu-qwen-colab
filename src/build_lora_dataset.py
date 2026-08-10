@@ -13,6 +13,11 @@ import argparse, json, random
 from pathlib import Path
 
 MODEL = "Qwen/Qwen3-4B-Instruct-2507"
+DEFAULT_SYSTEM_PROMPT = (
+    "You are chatting in casual Romanized Telugu written in Latin letters. "
+    "Do not interpret the user's text as Romanian, Hindi, or any other language. "
+    "Reply naturally in informal Andhra-style Romanized Telugu, with natural English code-switching when appropriate."
+)
 
 def read_mapping(path):
     if not path:
@@ -34,7 +39,7 @@ def clean_turns(raw):
             out.append({"speaker":speaker,"text":text})
     return out
 
-def make_examples(rec, assistant_speaker, max_context_turns, min_chars):
+def make_examples(rec, assistant_speaker, max_context_turns, min_chars, system_prompt):
     turns=clean_turns(rec.get("messages", [])); examples=[]
     for i,t in enumerate(turns):
         if t["speaker"] != assistant_speaker or len(t["text"]) < min_chars: continue
@@ -43,6 +48,8 @@ def make_examples(rec, assistant_speaker, max_context_turns, min_chars):
         while context and context[0]["speaker"] == assistant_speaker: context.pop(0)
         if not context or not any(x["speaker"] != assistant_speaker for x in context): continue
         prompt=[]
+        if system_prompt:
+            prompt.append({"role":"system","content":system_prompt})
         for x in context:
             prompt.append({"role":"assistant" if x["speaker"]==assistant_speaker else "user", "content":x["text"]})
         examples.append({"conversation_id":str(rec.get("conversation_id","")),"prompt":prompt,"completion":[{"role":"assistant","content":t["text"]}]})
@@ -56,6 +63,7 @@ def main():
     ap.add_argument("--max-context-turns",type=int,default=8)
     ap.add_argument("--min-assistant-chars",type=int,default=2)
     ap.add_argument("--validation-fraction",type=float,default=.1)
+    ap.add_argument("--system-prompt",default=DEFAULT_SYSTEM_PROMPT,help="System instruction prepended to every SFT prompt; pass an empty string to disable")
     ap.add_argument("--max-train-examples",type=int,default=0,help="Write at most this many randomized training examples (0 = all)")
     ap.add_argument("--max-validation-examples",type=int,default=0,help="Write at most this many randomized validation examples (0 = all)")
     ap.add_argument("--seed",type=int,default=42)
@@ -70,7 +78,7 @@ def main():
             targets=speakers if args.all_speakers else ([mapping[cid]] if cid in mapping else [])
             for speaker in targets:
                 conversations.append(cid)
-                all_examples.extend(make_examples(rec,speaker,args.max_context_turns,args.min_assistant_chars))
+                all_examples.extend(make_examples(rec,speaker,args.max_context_turns,args.min_assistant_chars,args.system_prompt))
 
     # Deduplicate exact prompt/completion pairs while preserving the first copy.
     unique=[]; seen=set()
