@@ -34,6 +34,18 @@ IP = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
 UPI = re.compile(r'\b[\w.-]{2,}@[\w.-]{2,}\b', re.I)
 SENSITIVE = re.compile(r'\b(?:otp|one[- ]time password|password|passcode|pin|cvv|aadhaar|aadhar|pan card|bank account|account number|ifsc|credit card|debit card|upi id|secret key|api key|token|medical report|prescription)\b', re.I)
 NON_TEXT = re.compile(r'^\s*<(?:media|image|video|audio|sticker|document|contact|location)[^>]*>\s*$', re.I)
+# System-event lines WhatsApp embeds in exports (sender-name independent).
+SYSTEM_EVENT = re.compile(
+    r'(?:security code|invite link|changed the (?:group|subject|description|icon)'
+    r'|you (?:left|were removed|were added|joined)|removed you|added you'
+    r'|(?:missed )?(?:voice|video) call|incoming call|call (?:ended|started)'
+    r'|this message was edited|deleted this message|this message was deleted'
+    r'|messages and calls are end-to-end encrypted|you created this group)',
+    re.I,
+)
+# After redaction: a message that is ONLY placeholders (bare mentions, bare
+# links, bare phone/email) carries no signal -> drop it.
+PLACEHOLDER_ONLY = re.compile(r'^(?:<URL>|<EMAIL>|<PHONE>|<UPI>|@?<PERSON>|\s)+$')
 
 
 def norm_name(name: str) -> str:
@@ -46,7 +58,7 @@ def anonymize_text(text: str, names: set[str]) -> tuple[str, bool]:
     # Strip bidirectional/isolate control marks (U+200E/200F/2068/2069) that
     # WhatsApp embeds around names and mentions.
     text = text.replace('\u200e', '').replace('\u200f', '').replace('\u2068', '').replace('\u2069', '').strip()
-    if not text or SYSTEM.match(text) or NON_TEXT.match(text):
+    if not text or SYSTEM.match(text) or NON_TEXT.match(text) or SYSTEM_EVENT.search(text):
         return '', True
     # Drop likely high-risk messages rather than pretending regex can safely sanitize them.
     if SENSITIVE.search(text):
@@ -65,6 +77,9 @@ def anonymize_text(text: str, names: set[str]) -> tuple[str, bool]:
     text = re.sub(r'\s+', ' ', text).strip()
     # Remove obvious export artifacts and very short noise.
     text = re.sub(r'\s*\(file attached\)\s*', ' ', text, flags=re.I)
+    # After redaction: bare mentions / bare links carry no content.
+    if PLACEHOLDER_ONLY.match(text):
+        return '', True
     if len(text) < 2 or not re.search(r'[A-Za-z\u0C00-\u0C7F]', text):
         return '', True
     return text, False
